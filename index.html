@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>小鱼机系统</title>
+    <!-- PWA 沉浸式全屏配置 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="apple-touch-icon" href="https://api.iconify.design/ph/fish-light.svg">
+    <!-- 极简韩系线性图标库 -->
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+    <style>
+        /* --- 韩系极简 UI 变量 --- */
+        :root {
+            --bg-color: #f7f8fa; --white: #ffffff;
+            --text-main: #1f2329; --text-sub: #8f959e;
+            --border-light: #dee0e3; --blue-primary: #5c85d6;
+            --pink-live: #ff6b8b; /* 直播间粉色调 */
+            --mask-size: 120%; --mask-x: -10%; --mask-y: -10%;
+            --radius-lg: 24px; --radius-md: 16px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "PingFang SC", sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-color); color: var(--text-main); height: 100vh; overflow: hidden; }
+        
+        /* 全局轻提示 */
+        #toast { position: fixed; top: -60px; left: 50%; transform: translateX(-50%); background: rgba(31,35,41,0.9); color: #fff; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: 500; transition: top 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); z-index: 9999; pointer-events: none; box-shadow: 0 10px 20px rgba(0,0,0,0.1);}
+        #toast.show { top: calc(20px + env(safe-area-inset-top)); }
+
+        .app-view { display: none; width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; background: var(--bg-color); flex-direction: column; overflow: hidden; z-index: 1;}
+        .app-view.active { display: flex; }
+        .tab-content { display: none; width: 100%; height: 100%; flex-direction: column; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom)); background: var(--bg-color); }
+        .tab-content.active { display: flex; }
+
+        .top-header { padding-top: env(safe-area-inset-top); height: calc(50px + env(safe-area-inset-top)); display: flex; align-items: center; justify-content: center; position: relative; font-size: 16px; font-weight: 600; background: var(--white); border-bottom: 1px solid var(--border-light); flex-shrink: 0; z-index: 50;}
+        .top-header .back-btn, .top-header .right-btn { position: absolute; bottom: 5px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
+        .top-header .back-btn { left: 10px; } .top-header .right-btn { right: 10px; }
+
+        #desktop { padding: 60px 20px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .icon-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
+        .icon-btn .box { width: 60px; height: 60px; border-radius: 18px; background: var(--white); display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid var(--border-light); }
+
+        .form-group { padding: 16px 20px 0; }
+        .form-group label { display: block; font-size: 13px; color: var(--text-sub); margin-bottom: 8px; font-weight: 500;}
+        .form-control { width: 100%; padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-light); background: var(--bg-color); font-size: 15px; outline: none; transition: 0.2s;}
+        .form-control:focus { border-color: var(--blue-primary); background: var(--white); }
+        .btn-fill { background: var(--blue-primary); color: var(--white); padding: 14px; border-radius: var(--radius-md); text-align: center; font-size: 15px; border: none; font-weight: 600; width: 100%; margin-top: 20px; cursor: pointer; box-shadow: 0 6px 15px rgba(92,133,214,0.2);}
+        .btn-outline { background: var(--white); color: var(--text-main); border: 1px solid var(--border-light); padding: 10px 14px; border-radius: var(--radius-md); font-size: 14px; cursor: pointer;}
+
+        .list-card { display: flex; align-items: center; padding: 16px; margin: 12px 16px; background: var(--white); border-radius: var(--radius-md); box-shadow: 0 2px 10px rgba(0,0,0,0.02); cursor: pointer; }
+        .list-card img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 12px; background: #eee;} 
+        .list-card .info { flex: 1; overflow: hidden; }
+        .list-card .title { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: var(--text-main); }
+        .list-card .desc { font-size: 13px; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* 猫箱聊天 */
+        #chat-room { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); z-index: 100; display: none; flex-direction: column; }
+        .chat-scroll { flex: 1; padding: 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+        .msg-block { display: flex; gap: 12px; width: 100%; align-items: flex-start; transition: all 0.2s; }
+        .msg-block.ai { -webkit-user-select: none; user-select: none; }
+        .msg-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: #eaeaea; cursor: pointer; }
+        .msg-content { flex: 1; background: var(--white); padding: 14px; border-radius: 16px; border: 1px solid var(--border-light); }
+        .msg-name { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 6px; }
+        .msg-text { font-size: 15px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; color: #2c2e33;}
+        .msg-block.user .msg-content { background: #f0f4ff; border-color: #d6e2ff; }
+        .chat-input-area { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--white); border-top: 1px solid var(--border-light); display: flex; gap: 10px; align-items: flex-end; }
+        .chat-input-area textarea { flex: 1; min-height: 44px; max-height: 120px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-light); background: var(--bg-color); font-size: 15px; outline: none; resize: none; }
+        .chat-input-area .send-btn { width: 44px; height: 44px; border-radius: var(--radius-md); background: var(--blue-primary); color: var(--white); border: none; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer;}
+
+        .lore-item { background: var(--white); margin: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-light); overflow: hidden;}
+        .lore-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; cursor: pointer; background: #fafafa;}
+        .lore-body { padding: 16px; display: none; border-top: 1px solid var(--border-light); background: var(--white);}
+        .lore-body.open { display: block; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);}
+        input:checked + .slider { background-color: var(--blue-primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+        .lore-tag { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-light); font-size: 13px; color: var(--text-sub); cursor: pointer; transition: all 0.2s; background: var(--white); user-select: none; }
+        .lore-tag.active { background: var(--blue-primary); color: var(--white); border-color: var(--blue-primary); }
+
+        .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 16px; }
+        .gallery-item { width: 100%; aspect-ratio: 1/1; border-radius: 8px; object-fit: cover; background: #eaeaea; }
+        .upload-btn-box { width: 100%; aspect-ratio: 1/1; border-radius: 8px; border: 2px dashed var(--border-light); display: flex; align-items: center; justify-content: center; font-size: 30px; color: var(--text-sub); cursor: pointer; }
+        .profile-header { display: flex; flex-direction: column; align-items: center; padding: 40px 20px 20px; }
+        .avatar-box { position: relative; width: 90px; height: 90px; margin-bottom: 16px; }
+        .avatar-box .base-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+        .avatar-box .mask-layer { position: absolute; width: var(--mask-size); height: var(--mask-size); top: var(--mask-y); left: var(--mask-x); background-image: url('https://api.iconify.design/line-md/loading-twotone-loop.svg?color=%235c85d6'); background-size: contain; background-repeat: no-repeat; background-position: center; pointer-events: none; }
+        .name-edit { font-size: 22px; font-weight: bold; margin-bottom:6px; display:flex; align-items:center; gap:6px; cursor:pointer;}
+        .id-edit { font-size: 13px; color: var(--text-sub); display:inline-flex; align-items:center; gap:4px; padding: 4px 10px; border-radius: 12px; background: rgba(0,0,0,0.04); cursor:pointer;}
+        .menu-list { background: var(--white); margin: 0 16px; border-radius: var(--radius-md); padding: 0 16px; }
+        .menu-item { padding: 18px 0; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; font-size: 15px; cursor: pointer; color: var(--text-main); }
+        .menu-item:last-child { border-bottom: none; }
+        
+        .bottom-sheet { position: fixed; bottom: -100%; left: 0; width: 100%; background: var(--white); border-top-left-radius: var(--radius-lg); border-top-right-radius: var(--radius-lg); box-shadow: 0 -5px 20px rgba(0,0,0,0.1); padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); transition: 0.4s cubic-bezier(0.1, 0.9, 0.2, 1); z-index: 200; display: flex; flex-direction: column; gap: 16px; max-height: 90vh; overflow-y: auto;}
+        .bottom-sheet.show { bottom: 0; }
+        
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; padding-bottom: env(safe-area-inset-bottom); height: calc(60px + env(safe-area-inset-bottom)); display: flex; justify-content: space-around; align-items: center; background: var(--white); border-top: 1px solid var(--border-light); z-index: 50; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; color: var(--text-sub); cursor: pointer; width: 60px; margin-top: 5px;}
+        .nav-item.active { color: var(--text-main); }
+        .nav-item iconify-icon { font-size: 26px; }
+        .nav-plus { width: 44px; height: 44px; border-radius: 16px; background: var(--text-main); color: var(--white); display: flex; justify-content: center; align-items: center; font-size: 24px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); margin-top: -15px; z-index: 51;}
+
+        /* --- 直播系统专属样式 --- */
+        .live-header-card { margin: 20px 16px; padding: 20px; background: var(--white); border-radius: var(--radius-lg); box-shadow: 0 4px 20px rgba(0,0,0,0.03); display: flex; justify-content: space-between; align-items: center;}
+        .live-header-card .info div:first-child { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+        .live-header-card .info div:last-child { font-size: 13px; color: var(--text-sub); display: flex; align-items: center; gap: 4px;}
+        .level-badge { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;}
+        .money-btn { padding: 8px 16px; border-radius: 20px; background: #fff5f7; color: var(--pink-live); font-weight: bold; font-size: 14px; cursor: pointer; border: none; }
+
+        .streamer-grid { padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; overflow-y: auto; flex: 1; padding-bottom: 30px;}
+        .s-card { background: var(--white); border-radius: var(--radius-md); overflow: hidden; position: relative; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.02);}
+        .s-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; background: #eaeaea; }
+        .s-card .live-tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 10px; backdrop-filter: blur(4px); display: flex; align-items: center; gap: 4px;}
+        .s-card .live-tag .dot { width: 6px; height: 6px; background: #ff4d4f; border-radius: 50%; animation: pulse 1s infinite;}
+        .s-card .name { position: absolute; bottom: 0; left: 0; width: 100%; padding: 20px 10px 10px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); color: #fff; font-weight: bold; font-size: 14px; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
+
+        /* 直播间内部 */
+        #live-room-view { background: #000; position: relative; }
+        .bg-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: filter 0.5s; }
+        .bg-video.dim { filter: brightness(0.3) blur(2px); } /* 大礼物背景变暗模糊 */
+        .room-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; z-index: 10; background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 20%, transparent 60%, rgba(0,0,0,0.7) 100%); pointer-events: none;}
+        .room-header-bar { padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: auto;}
+        .host-info { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 4px 12px 4px 4px; border-radius: 30px; display: flex; align-items: center; gap: 8px; color: #fff; }
+        .host-info img { width: 36px; height: 36px; border-radius: 50%; }
+        .host-info .name { font-size: 14px; font-weight: bold; }
+        .host-info .viewers { font-size: 10px; opacity: 0.8; }
+        .close-room { width: 36px; height: 36px; background: rgba(0,0,0,0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #fff; font-size: 20px; cursor: pointer; backdrop-filter: blur(10px);}
+
+        /* 直播弹幕区 */
+        .live-chat-scroll { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; pointer-events: auto; -webkit-mask-image: linear-gradient(to top, black 80%, transparent 100%); }
+        .live-chat-item { background: rgba(0,0,0,0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); padding: 6px 12px; border-radius: 16px; color: #fff; font-size: 14px; align-self: flex-start; max-width: 85%; line-height: 1.4; word-wrap: break-word; animation: slideIn 0.3s ease-out;}
+        .live-chat-item .uname { color: #ffd700; font-weight: bold; margin-right: 6px; font-size: 13px;}
+        .live-chat-item.system { color: #ff9a9e; background: rgba(255, 107, 139, 0.2); }
+        .live-chat-item.streamer { background: rgba(255, 255, 255, 0.9); color: var(--text-main); border: 1px solid var(--pink-live); font-weight: 500;}
+        .live-chat-item.streamer .uname { color: var(--pink-live); }
+        .live-chat-item.mega-gift { background: linear-gradient(90deg, rgba(255,107,139,0.8), rgba(255,215,0,0.8)); border: 2px solid #fff; box-shadow: 0 0 15px rgba(255,107,139,0.5); animation: megaFlash 1s infinite alternate; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes megaFlash { from { filter: brightness(1); } to { filter: brightness(1.2); box-shadow: 0 0 25px rgba(255,215,0,0.8); } }
+
+        .room-bottom { padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; gap: 12px; align-items: center; pointer-events: auto;}
+        .room-input { flex: 1; height: 44px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); border-radius: 22px; color: #fff; border: 1px solid rgba(255,255,255,0.2); padding: 0 16px; font-size: 14px; outline: none;}
+        .room-input::placeholder { color: rgba(255,255,255,0.6); }
+        .action-circle { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #ff6b8b, #ff9a9e); display: flex; justify-content: center; align-items: center; color: #fff; font-size: 24px; cursor: pointer; box-shadow: 0 4px 15px rgba(255,107,139,0.4); flex-shrink: 0;}
+
+        /* --- 全新梦幻粒子与礼物特效 --- */
+        #gift-anim-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;}
+        
+        .big-gift-anim { animation: giftPopOut 4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; display: flex; flex-direction: column; align-items: center; text-shadow: 0 2px 10px rgba(0,0,0,0.5); z-index: 101;}
+        .big-gift-anim img { width: 180px; height: 180px; object-fit: contain; filter: drop-shadow(0 0 30px rgba(255,255,255,0.8)); animation: floatGift 2s ease-in-out infinite;}
+        .big-gift-anim span { color: #fff; font-size: 26px; font-weight: bold; margin-top: 15px; background: linear-gradient(90deg, transparent, rgba(255,107,139,0.8), transparent); padding: 8px 30px; letter-spacing: 2px;}
+        
+        @keyframes giftPopOut { 0% { transform: scale(0) translateY(100px); opacity: 0; } 10% { transform: scale(1.1) translateY(0); opacity: 1; } 15% { transform: scale(1) translateY(0); opacity: 1; } 80% { transform: scale(1) translateY(0); opacity: 1; } 100% { transform: scale(1.5) translateY(-200px); opacity: 0; } }
+        @keyframes floatGift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+
+        /* 粒子基础样式 */
+        .particle { position: absolute; pointer-events: none; opacity: 0; z-index: 99; font-size: 24px; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .p-float { animation: floatUpAndFade 3s ease-out forwards; }
+        .p-explode { animation: explodeOut 2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; }
+        
+        @keyframes floatUpAndFade { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 20% { opacity: 1; transform: translateY(-50px) scale(1.2); } 100% { transform: translateY(-300px) scale(1) rotate(45deg); opacity: 0; } }
+        @keyframes explodeOut { 0% { transform: translate(0,0) scale(0.5); opacity: 1; } 100% { transform: translate(var(--tx), var(--ty)) scale(1.5) rotate(180deg); opacity: 0; } }
+
+        /* 礼物面板 */
+        .gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; overflow-y: auto; max-height: 40vh;}
+        .gift-item { display: flex; flex-direction: column; align-items: center; background: var(--bg-color); padding: 12px 5px; border-radius: var(--radius-md); border: 2px solid transparent; cursor: pointer; transition: 0.2s;}
+        .gift-item.selected { border-color: var(--pink-live); background: #fff5f7;}
+        .gift-item img { width: 40px; height: 40px; object-fit: contain; margin-bottom: 8px;}
+        .gift-item .g-name { font-size: 12px; font-weight: bold; color: var(--text-main); margin-bottom: 2px;}
+        .gift-item .g-price { font-size: 10px; color: var(--pink-live); display: flex; align-items: center; gap: 2px;}
+        .send-gift-bar { padding-top: 15px; border-top: 1px solid var(--border-light); margin-top: 15px; display: flex; justify-content: space-between; align-items: center;}
+
+        /* --- 虚拟银行卡UI --- */
+        .bank-card { background: linear-gradient(135deg, #2b2d42 0%, #8d99ae 100%); border-radius: 16px; padding: 20px; color: #fff; position: relative; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.15); margin-bottom: 20px;}
+        .bank-card::before { content: ""; position: absolute; right: -20px; top: -20px; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,0.1); pointer-events: none;}
+        .bank-card .chip { width: 40px; height: 30px; background: linear-gradient(135deg, #ffd700, #daa520); border-radius: 6px; margin-bottom: 20px; opacity: 0.9;}
+        .bank-card .number { font-size: 22px; font-family: 'Courier New', Courier, monospace; letter-spacing: 2px; margin-bottom: 15px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);}
+        .bank-card .holder { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;}
+    </style>
+</head>
+<body>
+
+    <div id="toast">操作成功</div>
+
+    <!-- 1. 桌面 -->
+    <div id="desktop-view" class="app-view active">
+        <div class="top-header" style="justify-content: center;">小鱼机系统</div>
+        <div id="desktop">
+            <div class="icon-btn" onclick="openApp('api-view')"><div class="box"><iconify-icon icon="ph:gear-six-light"></iconify-icon></div><span>API配置</span></div>
+            <div class="icon-btn" onclick="openApp('catbox-view')"><div class="box"><iconify-icon icon="ph:cat-light"></iconify-icon></div><span>小鱼猫箱</span></div>
+            <div class="icon-btn" onclick="openApp('lorebook-view')"><div class="box"><iconify-icon icon="ph:book-bookmark-light"></iconify-icon></div><span>世界书</span></div>
+            <div class="icon-btn" onclick="openApp('lobby-view')"><div class="box" style="color:var(--pink-live);"><iconify-icon icon="ph:broadcast-light"></iconify-icon></div><span>小鱼直播</span></div>
+        </div>
+    </div>
+
+    <!-- 2. API 配置 -->
+    <div id="api-view" class="app-view">
+        <div class="top-header"><div class="back-btn" onclick="closeApp()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>API 配置</div>
+        <div style="overflow-y: auto;">
+            <div class="form-group"><label>接口地址</label><input type="text" id="api-url" class="form-control" placeholder="https://api.openai.com/v1"></div>
+            <div class="form-group"><label>API Key</label><input type="password" id="api-key" class="form-control" placeholder="sk-..."></div>
+            <div class="form-group"><label>选择模型</label><div style="display: flex; gap: 10px;"><select id="api-model" class="form-control"></select><button class="btn-outline" onclick="fetchModels()">拉取</button></div></div>
+            <div style="padding: 20px;"><button class="btn-fill" onclick="saveApi()">保存配置</button></div>
+        </div>
+    </div>
+
+    <!-- 3. 世界书 -->
+    <div id="lorebook-view" class="app-view">
+        <div class="top-header"><div class="back-btn" onclick="closeApp()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>世界设定书<div class="right-btn" onclick="document.getElementById('lore-upload').click()"><iconify-icon icon="ph:file-arrow-up-light"></iconify-icon></div><input type="file" id="lore-upload" style="display:none;" accept=".txt" multiple onchange="importLorebook(this)"></div>
+        <div style="padding: 12px 20px 0; font-size: 12px; color: var(--text-sub);">角色绑定世界书后，无需任何关键词触发，AI将全程直接沉浸于该设定。</div>
+        <div id="lorebook-container" style="overflow-y: auto; flex: 1; padding-bottom: 30px;"></div>
+        <div style="padding: 20px; border-top: 1px solid var(--border-light);"><button class="btn-fill" style="margin-top: 0;" onclick="addNewLoreEntry()">+ 新增模块设定</button></div>
+    </div>
+
+    <!-- ================= 4. 直播系统专属模块 ================= -->
+    <div id="lobby-view" class="app-view">
+        <div class="top-header">
+            <div class="back-btn" onclick="closeApp()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>
+            <span style="color: var(--pink-live);"><iconify-icon icon="ph:broadcast-light" style="vertical-align:-2px;"></iconify-icon> 小鱼直播</span>
+            <div class="right-btn" onclick="openEditGifts()"><iconify-icon icon="ph:gift-light"></iconify-icon></div>
+        </div>
+        
+        <div class="live-header-card">
+            <div class="info">
+                <div id="my-name-display" style="cursor:pointer;" onclick="editMyName()">我</div>
+                <div><span class="level-badge" id="my-level-display">Lv.1</span> 经验: <span id="my-exp-display">0</span></div>
+            </div>
+            <div>
+                <div style="font-size:12px; color:var(--text-sub); text-align:center; margin-bottom:4px;">我的金币</div>
+                <button class="money-btn" onclick="openWalletModal()">🪙 <span id="my-money-display">0</span> <iconify-icon icon="ph:plus-circle-fill" style="vertical-align:-2px;"></iconify-icon></button>
+            </div>
+        </div>
+
+        <div style="padding: 0 16px 10px; font-weight: bold; font-size: 16px;">正在热播</div>
+        <div class="streamer-grid" id="streamer-list"></div>
+    </div>
+
+    <div id="live-room-view" class="app-view">
+        <img src="" class="bg-video" id="room-bg">
+        <div class="room-ui">
+            <div class="room-header-bar">
+                <div class="host-info"><img src="" id="room-avatar"><div><div class="name" id="room-name">主播名</div><div class="viewers"><iconify-icon icon="ph:users-light"></iconify-icon> <span id="room-viewers">1000</span> 人</div></div></div>
+                <div class="close-room" onclick="closeLiveRoom()"><iconify-icon icon="ph:x"></iconify-icon></div>
+            </div>
+            <div class="live-chat-scroll" id="live-chat-box"></div>
+            <div class="room-bottom">
+                <input type="text" class="room-input" id="danmaku-input" placeholder="说点什么聊聊...">
+                <div class="action-circle" onclick="sendDanmaku()"><iconify-icon icon="ph:paper-plane-right-fill"></iconify-icon></div>
+                <div class="action-circle" style="background: linear-gradient(135deg, #f6d365, #fda085);" onclick="openGiftPanel()"><iconify-icon icon="ph:gift-fill"></iconify-icon></div>
+            </div>
+        </div>
+        <div id="gift-anim-container"></div>
+    </div>
+
+    <!-- 4.3 充值钱包弹窗 -->
+    <div id="wallet-modal" class="bottom-sheet">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-weight:bold; padding: 0 20px 15px; border-bottom:1px solid var(--border-light);">
+            我的钱包 <span style="font-size: 20px; font-weight: normal; cursor: pointer;" onclick="this.closest('.bottom-sheet').classList.remove('show')">✕</span>
+        </div>
+        <div style="text-align:center; padding: 10px 0;">
+            <div style="font-size:12px; color:var(--text-sub);">当前余额</div>
+            <div style="font-size:28px; font-weight:bold; color:var(--pink-live);">🪙 <span id="wallet-money-panel">0</span></div>
+        </div>
+        <div class="form-group" style="padding-top:0;">
+            <label>常规充值通道</label>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <button class="btn-outline" style="flex:1;" onclick="normalRecharge(100)">100金币/￥10</button>
+                <button class="btn-outline" style="flex:1;" onclick="normalRecharge(500)">500金币/￥50</button>
+                <button class="btn-outline" style="flex:1;" onclick="normalRecharge(1000)">1000金币/￥100</button>
+            </div>
+            <button class="btn-fill" id="bind-card-btn" style="margin-top:0;" onclick="openBindCardModal()">🏦 绑定银行卡</button>
+        </div>
+        <div class="form-group" style="margin-top:10px; border-top:1px solid var(--border-light); padding-top:20px;">
+            <label style="color:#ff4d4f;"><iconify-icon icon="ph:warning-circle" style="vertical-align:-2px;"></iconify-icon> 开发者特权通道 (随意改)</label>
+            <div style="display:flex; gap:10px;">
+                <input type="number" id="cheat-money-input" class="form-control" placeholder="输入任意金额...">
+                <button class="btn-fill" style="margin-top:0; width:80px; background:#ff4d4f;" onclick="cheatMoney()">修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全新：真实感绑卡弹窗 -->
+    <div id="bind-card-modal" class="bottom-sheet" style="z-index: 250;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-weight:bold; padding: 0 20px 15px; border-bottom:1px solid var(--border-light);">
+            添加支付方式 <span style="font-size: 20px; font-weight: normal; cursor: pointer;" onclick="this.closest('.bottom-sheet').classList.remove('show')">✕</span>
+        </div>
+        <div style="padding: 20px;">
+            <div class="bank-card">
+                <div class="chip"></div>
+                <div class="number" id="card-num-preview">**** **** **** ****</div>
+                <div class="holder" id="card-holder-preview">YOUR NAME</div>
+            </div>
+            <div class="form-group" style="padding:0; margin-bottom:15px;">
+                <label>卡号</label>
+                <input type="text" id="card-num-input" class="form-control" placeholder="请输入银行卡号" maxlength="19" oninput="formatCardNum(this)">
+            </div>
+            <div class="form-group" style="padding:0;">
+                <label>持卡人姓名</label>
+                <input type="text" id="card-holder-input" class="form-control" placeholder="您的姓名" oninput="document.getElementById('card-holder-preview').innerText = this.value.toUpperCase() || 'YOUR NAME'">
+            </div>
+            <button class="btn-fill" style="margin-top:25px;" onclick="confirmBindCard()">确认并验证绑定</button>
+        </div>
+    </div>
+
+    <!-- 4.4 刷礼物弹窗 -->
+    <div id="gift-modal" class="bottom-sheet" style="background: var(--white); padding-left:20px; padding-right:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-weight:bold; padding-bottom: 15px; border-bottom:1px solid var(--border-light); margin-bottom:15px;">
+            礼物背包 <span style="font-size: 20px; font-weight: normal; cursor: pointer;" onclick="this.closest('.bottom-sheet').classList.remove('show')">✕</span>
+        </div>
+        <div class="gift-grid" id="gift-render-area"></div>
+        <div class="send-gift-bar">
+            <div style="font-size:14px;">余额: <span style="color:var(--pink-live); font-weight:bold;">🪙 <span id="gift-panel-money"></span></span></div>
+            <button class="btn-fill" style="padding: 10px 30px; margin-top:0; width:auto; background:var(--pink-live);" onclick="sendGiftAction()">赠送</button>
+        </div>
+    </div>
+
+    <!-- 4.5 自定义礼物管理 -->
+    <div id="edit-gift-modal" class="app-view" style="z-index: 60;">
+        <div class="top-header"><div class="back-btn" onclick="closeEditGifts()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>自定义礼物库</div>
+        <div style="overflow-y: auto; flex:1;">
+            <div style="padding: 16px; font-size: 13px; color: var(--text-sub);">在这里可以上传图片，创造只属于你的专属礼物。</div>
+            <div class="form-group"><label>礼物名称</label><input type="text" id="new-g-name" class="form-control" placeholder="例如：豪华游艇"></div>
+            <div class="form-group"><label>礼物价格 (金币)</label><input type="number" id="new-g-price" class="form-control" placeholder="520"></div>
+            <div class="form-group" style="display:flex; align-items:center; gap: 15px;">
+                <div id="upload-g-preview" style="width:60px; height:60px; border-radius:12px; border:2px dashed var(--border-light); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:24px; color:var(--text-sub);" onclick="document.getElementById('g-img-upload').click()">+</div>
+                <span style="font-size: 12px; color: var(--text-sub);">点击上传礼物图片(PNG去底色最佳)</span>
+                <input type="file" id="g-img-upload" accept="image/*" style="display:none;" onchange="previewGiftImg(this)">
+            </div>
+            <div style="padding: 20px;"><button class="btn-fill" style="margin-top:0; background:var(--pink-live);" onclick="saveNewGift()">添加到礼物库</button></div>
+            <div style="padding: 20px; border-top:1px solid var(--border-light);">
+                <div style="font-weight:bold; margin-bottom: 15px;">已有的礼物库</div>
+                <div id="custom-gift-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 5. 猫箱主应用 ================= -->
+    <div id="catbox-view" class="app-view">
+        <div id="tab-msg" class="tab-content active"><div class="top-header"><div class="back-btn" onclick="closeApp()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>最近互动</div><div id="msg-list-container"></div></div>
+        <div id="tab-contact" class="tab-content"><div class="top-header"><div class="back-btn" onclick="closeApp()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>通讯录</div><div id="contact-list-container"></div></div>
+        <div id="tab-gallery" class="tab-content"><div class="top-header"><div class="back-btn" onclick="closeApp()"><iconify-icon icon="ph:caret-left"></iconify-icon></div>图鉴相册</div><div class="gallery-grid" id="gallery-grid"><div class="upload-btn-box" onclick="document.getElementById('gallery-upload').click()">+</div><input type="file" id="gallery-upload" style="display:none;" accept="image/*" multiple onchange="uploadGallery(this)"></div></div>
+        
+        <div id="tab-profile" class="tab-content">
+            <div class="top-header">我的主页</div>
+            <div class="profile-header">
+                <div class="avatar-box" onclick="document.getElementById('avatar-upload').click()"><img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200" class="base-img" id="user-avatar"><div class="mask-layer" id="user-mask"></div></div>
+                <input type="file" id="avatar-upload" style="display:none;" accept="image/*" onchange="changeAvatar(this)">
+                <div class="name-edit" onclick="editMyName()"><span id="display-my-name-cat">YuXin</span> <iconify-icon icon="ph:pencil-simple" style="font-size:16px; color:var(--text-sub)"></iconify-icon></div>
+                <div class="id-edit" onclick="editMyId()"><span id="display-my-id">ID: anydoor_user</span> <iconify-icon icon="ph:pencil-simple"></iconify-icon></div>
+            </div>
+            <div class="menu-list">
+                <div class="menu-item" onclick="document.getElementById('mask-modal').classList.add('show')"><span>头像框位置调节</span><iconify-icon icon="ph:sliders-horizontal"></iconify-icon></div>
+                <div class="menu-item" onclick="document.getElementById('mask-upload').click()"><span>更换遮罩特效动图</span><iconify-icon icon="ph:image-light"></iconify-icon></div>
+                <div class="menu-item" onclick="openUserInfo()"><span>我的主观人设 (设定)</span><iconify-icon icon="ph:user-focus-light"></iconify-icon></div>
+                <input type="file" id="mask-upload" style="display:none;" accept="image/*" onchange="uploadMask(this)">
+            </div>
+        </div>
+
+        <div id="create-modal" class="app-view" style="z-index: 60;">
+            <div class="top-header"><div class="back-btn" onclick="closeCreateModal()"><iconify-icon icon="ph:x-light"></iconify-icon></div>构建新世界</div>
+            <div style="overflow-y: auto;">
+                <div class="form-group"><label>角色名 / 剧本名</label><input type="text" id="new-char-name" class="form-control"></div>
+                <div class="form-group"><label>系统设定 / 性格特征 (核心)</label><textarea id="new-char-prompt" class="form-control" style="min-height: 120px; resize:none;"></textarea></div>
+                <div class="form-group"><label>装载世界书 (多选)</label><div id="create-lore-tags" style="display:flex; flex-wrap:wrap; gap:8px;"></div></div>
+                <div class="form-group"><label>开场白对话</label><textarea id="new-char-greeting" class="form-control" style="min-height: 80px; resize:none;"></textarea></div>
+                <div style="padding: 20px;"><button class="btn-fill" onclick="saveNewCharacter()">保存到通讯录</button></div>
+            </div>
+        </div>
+
+        <div id="chat-room">
+            <div class="top-header"><div class="back-btn" onclick="closeChatRoom()"><iconify-icon icon="ph:caret-left"></iconify-icon></div><span id="chat-title">连接中...</span><div class="right-btn" onclick="openUserInfo()"><iconify-icon icon="ph:user-focus-light"></iconify-icon></div></div>
+            <div class="chat-scroll" id="chat-box"></div>
+            <div class="chat-input-area"><textarea id="chat-input" placeholder="输入对话或动作..."></textarea><button class="send-btn" onclick="sendMsg()"><iconify-icon icon="ph:paper-plane-right-fill"></iconify-icon></button></div>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="switchTab('tab-msg', this)"><iconify-icon icon="ph:chat-circle-dots-fill"></iconify-icon><span>消息</span></div>
+            <div class="nav-item" onclick="switchTab('tab-contact', this)"><iconify-icon icon="ph:address-book-light"></iconify-icon><span>通讯录</span></div>
+            <div class="nav-plus" onclick="openCreateModal()"><iconify-icon icon="ph:plus-bold"></iconify-icon></div>
+            <div class="nav-item" onclick="switchTab('tab-gallery', this)"><iconify-icon icon="ph:image-square-light"></iconify-icon><span>图鉴</span></div>
+            <div class="nav-item" onclick="switchTab('tab-profile', this)"><iconify-icon icon="ph:user-light"></iconify-icon><span>我的</span></div>
+        </div>
+        
+        <div id="mask-modal" class="bottom-sheet"><div style="text-align: center; font-weight: bold; margin-bottom: 10px;">遮罩调节 <span style="float:right; cursor:pointer;" onclick="this.parentElement.parentElement.classList.remove('show')">完成</span></div><div class="slider-row">缩放 <input type="range" min="50" max="200" value="120" oninput="updateMask('size', this.value)"></div><div class="slider-row">X轴 <input type="range" min="-50" max="50" value="-10" oninput="updateMask('x', this.value)"></div><div class="slider-row">Y轴 <input type="range" min="-50" max="50" value="-10" oninput="updateMask('y', this.value)"></div></div>
+        <div id="user-info-modal" class="bottom-sheet" style="z-index: 250;"><div style="text-align: center; font-weight: bold;">主观人设 <span style="float:right; cursor:pointer;" onclick="this.parentElement.parentElement.classList.remove('show')">✕</span></div><div style="display:flex; gap:10px;"><div class="form-group" style="padding:0; flex:2;"><label>我的名字</label><input type="text" id="my-name-input" class="form-control"></div><div class="form-group" style="padding:0; flex:1;"><label>性别</label><select id="my-gender-input" class="form-control" style="padding-left:10px;"><option value="女">女</option><option value="男">男</option><option value="保密">保密</option></select></div></div><div class="form-group" style="padding:0; margin-top:10px;"><label>我的外貌/身份</label><textarea id="my-desc-input" class="form-control" style="min-height: 80px; resize:none;"></textarea></div><button class="btn-fill" style="margin-top: 15px;" onclick="saveUserInfo()">保存</button></div>
+        <div id="role-info-modal" class="bottom-sheet" style="z-index: 250; padding-top: 10px;"><div style="text-align: center; font-weight: bold; margin-bottom: 15px;">档案设定</div><div style="display:flex; flex-direction:column; align-items:center; margin-bottom: 15px;"><img src="" id="edit-role-avatar" style="width:70px; height:70px; border-radius:50%; object-fit:cover; margin-bottom:8px; cursor:pointer; background:#eee;" onclick="document.getElementById('edit-role-upload').click()"><span style="font-size:12px; color:var(--blue-primary); cursor:pointer;" onclick="document.getElementById('edit-role-upload').click()">更换头像</span><input type="file" id="edit-role-upload" style="display:none;" accept="image/*" onchange="changeRoleAvatar(this)"></div><div class="form-group" style="padding:0;"><label>角色名</label><input type="text" id="edit-role-name" class="form-control" style="font-weight:bold;"></div><div class="form-group" style="padding:0; margin-top:10px;"><label>细节设定</label><textarea id="edit-role-desc" class="form-control" style="min-height:100px; resize:none; font-size:14px; color:var(--text-sub);"></textarea></div><div class="form-group" style="padding:0; margin-top:10px; width: 100%;"><label>绑定世界书</label><div id="edit-lore-tags" style="display:flex; flex-wrap:wrap; gap:8px;"></div></div><button class="btn-fill" style="margin-top:15px;" onclick="saveRoleInfo()">保存修改并返回</button></div>
+    </div>
+
+    <script>
+        // ================= 全局工具与数据 =================
+        function safeGetJSON(key, defaultVal) { try { let data = JSON.parse(localStorage.getItem(key)); return Array.isArray(data)?data:defaultVal; } catch(e) { return defaultVal; } }
+        function showToast(text) { let t = document.getElementById('toast'); t.innerText = text; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000); }
+
+        let contactData = safeGetJSON('contacts_final', []);
+        let loreData = safeGetJSON('lorebook_v5', []);
+        let myName = localStorage.getItem('myName') || '我';
+        let myMoney = parseInt(localStorage.getItem('live_money')) || 0;
+        let myExp = parseInt(localStorage.getItem('live_exp')) || 0;
+        let isCardBound = localStorage.getItem('isCardBound') === 'true';
+        let boundCardNum = localStorage.getItem('boundCardNum') || '';
+
+        // ================= UI 同步 =================
+        function syncGlobalInfo() {
+            myName = localStorage.getItem('myName') || '我';
+            let nCat = document.getElementById('display-my-name-cat'); if(nCat) nCat.innerText = myName;
+            let idCat = localStorage.getItem('myId'); let idD = document.getElementById('display-my-id'); if(idD && idCat) idD.innerHTML = `ID: ${idCat}`;
+            updateLiveInfoUI();
+        }
+
+        function openApp(id) {
+            document.querySelectorAll('.app-view').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active'); syncGlobalInfo();
+            if(id === 'api-view') loadApiData(); if(id === 'lorebook-view') renderLorebook();
+            if(id === 'catbox-view') renderContacts(); if(id === 'lobby-view') renderLobby();
+        }
+        function closeApp() { document.querySelectorAll('.app-view').forEach(el => el.classList.remove('active')); document.getElementById('desktop-view').classList.add('active'); }
+        function switchTab(tabId, el) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active')); document.getElementById(tabId).classList.add('active');
+            if(el) { document.querySelectorAll('.nav-item').forEach(nav => { nav.classList.remove('active'); let i = nav.querySelector('iconify-icon'); i.setAttribute('icon', i.getAttribute('icon').replace('-fill', '-light')); }); el.classList.add('active'); let ai = el.querySelector('iconify-icon'); ai.setAttribute('icon', ai.getAttribute('icon').replace('-light', '-fill')); }
+        }
+        
+        function editMyName() { let n = prompt("修改您的全局昵称", myName); if(n && n.trim() !== '') { localStorage.setItem('myName', n.trim()); syncGlobalInfo(); showToast("昵称已更新"); } }
+        function editMyId() { let current = localStorage.getItem('myId') || 'anydoor_user'; let n = prompt("修改专属 ID", current); if(n && n.trim() !== '') { localStorage.setItem('myId', n.trim()); syncGlobalInfo(); showToast("ID 已更新"); } }
+        function openUserInfo() { document.getElementById('my-name-input').value = myName; document.getElementById('my-gender-input').value = localStorage.getItem('myGender') || '女'; document.getElementById('my-desc-input').value = localStorage.getItem('myDesc') || ''; document.getElementById('user-info-modal').classList.add('show'); }
+        function saveUserInfo() { localStorage.setItem('myName', document.getElementById('my-name-input').value || '我'); localStorage.setItem('myGender', document.getElementById('my-gender-input').value); localStorage.setItem('myDesc', document.getElementById('my-desc-input').value); document.getElementById('user-info-modal').classList.remove('show'); syncGlobalInfo(); showToast("设定已保存"); }
+
+        // ================= 直播系统 =================
+        const defaultGifts = [
+            { id: 'g1', name: '小心心', price: 10, img: 'https://api.iconify.design/twemoji/red-heart.svg' },
+            { id: 'g2', name: '奶茶', price: 50, img: 'https://api.iconify.design/twemoji/bubble-tea.svg' },
+            { id: 'g3', name: '钻戒', price: 520, img: 'https://api.iconify.design/twemoji/ring.svg' },
+            { id: 'g4', name: '跑车', price: 1000, img: 'https://api.iconify.design/twemoji/sport-utility-vehicle.svg' },
+            { id: 'g5', name: '梦幻游艇', price: 5000, img: 'https://api.iconify.design/twemoji/motor-boat.svg' },
+            { id: 'g6', name: '浪漫城堡', price: 10000, img: 'https://api.iconify.design/twemoji/castle.svg' }
+        ];
+        let giftDB = safeGetJSON('live_gifts', defaultGifts);
+        function getLevel() { return Math.floor(Math.sqrt(myExp / 100)) + 1; }
+
+        function updateLiveInfoUI() {
+            document.getElementById('my-name-display').innerText = myName; document.getElementById('my-money-display').innerText = myMoney;
+            document.getElementById('wallet-money-panel').innerText = myMoney; document.getElementById('my-exp-display').innerText = myExp;
+            document.getElementById('my-level-display').innerText = 'Lv.' + getLevel();
+            localStorage.setItem('live_money', myMoney); localStorage.setItem('live_exp', myExp);
+            
+            let btn = document.getElementById('bind-card-btn');
+            if(isCardBound) { btn.innerText = `🏦 已绑卡 (尾号 ${boundCardNum.slice(-4)})`; btn.style.background = "#52c41a"; }
+            else { btn.innerText = "🏦 绑定银行卡"; btn.style.background = "var(--blue-primary)"; }
+        }
+
+        // --- 真实绑卡UI逻辑 ---
+        function openWalletModal() { updateLiveInfoUI(); document.getElementById('wallet-modal').classList.add('show'); }
+        function openBindCardModal() {
+            if(isCardBound) return showToast("您已经绑定过银行卡了，可直接充值");
+            document.getElementById('bind-card-modal').classList.add('show');
+        }
+        function formatCardNum(input) {
+            let val = input.value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+            let formatted = val.match(/.{1,4}/g)?.join(' ') || '';
+            input.value = formatted;
+            document.getElementById('card-num-preview').innerText = formatted || '**** **** **** ****';
+        }
+        function confirmBindCard() {
+            let num = document.getElementById('card-num-input').value.replace(/\s+/g, '');
+            if(num.length < 16) return showToast("请输入正确的银行卡号");
+            isCardBound = true; boundCardNum = num;
+            localStorage.setItem('isCardBound', 'true'); localStorage.setItem('boundCardNum', num);
+            document.getElementById('bind-card-modal').classList.remove('show');
+            updateLiveInfoUI(); showToast("卡片验证通过！绑定成功");
+        }
+        
+        function normalRecharge(amount) { if(!isCardBound) return showToast("抱歉，请先绑定银行卡！"); myMoney += amount; updateLiveInfoUI(); showToast(`网银扣款成功！入账 ${amount} 金币`); }
+        function cheatMoney() { let v = parseInt(document.getElementById('cheat-money-input').value); if(!isNaN(v)) { myMoney = v; updateLiveInfoUI(); document.getElementById('cheat-money-input').value = ''; showToast("数据篡改成功！"); } }
+
+        function renderLobby() {
+            updateLiveInfoUI(); const list = document.getElementById('streamer-list'); list.innerHTML = '';
+            if (contactData.length === 0) { list.innerHTML = '<div style="grid-column: span 2; text-align:center; padding: 40px; color: var(--text-sub);">你的猫箱里还没有人物角色<br>请先去桌面《小鱼猫箱》里创建</div>'; return; }
+            contactData.forEach(c => {
+                let img = c.avatar || 'https://api.iconify.design/ph/user-circle-light.svg?color=%238f959e';
+                let div = document.createElement('div'); div.className = 's-card';
+                div.innerHTML = `<img src="${img}"><div class="live-tag"><div class="dot"></div>LIVE</div><div class="name">${c.name}</div>`;
+                div.onclick = () => enterLiveRoom(c); list.appendChild(div);
+            });
+        }
+
+        // --- 直播间核心 ---
+        let currentStreamer = null; let roomViewers = 0; let loopers = []; let chatHistoryAI = []; 
+        const fakeNames = ["修狗","小仙女","一夜暴富","用户9527","看透不说透","南风","半岛铁盒","阿伟","纯路人","潜水员"];
+        const fakeChats = ["哇塞！","好看！","主播今天真漂亮","刚来，这是在干嘛？","666666","这也太棒了吧","支持一下","爱了爱了","晚上吃什么？","哈哈哈"];
+
+        function enterLiveRoom(streamer) {
+            currentStreamer = streamer; let imgUrl = streamer.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600';
+            document.getElementById('room-bg').src = imgUrl; document.getElementById('room-avatar').src = imgUrl; document.getElementById('room-name').innerText = streamer.name; document.getElementById('live-chat-box').innerHTML = '';
+            roomViewers = Math.floor(Math.random() * 5000) + 500; document.getElementById('room-viewers').innerText = roomViewers;
+            document.getElementById('lobby-view').classList.remove('active'); document.getElementById('live-room-view').classList.add('active');
+            chatHistoryAI = []; appendSystemLiveChat(`欢迎来到 ${streamer.name} 的直播间！`);
+            loopers.push(setInterval(() => { roomViewers += (Math.random()>0.5?1:-1)*Math.floor(Math.random()*50); document.getElementById('room-viewers').innerText = roomViewers; }, 3000));
+            loopers.push(setInterval(() => { if(Math.random()>0.3) appendUserLiveChat(fakeNames[Math.floor(Math.random()*fakeNames.length)], fakeChats[Math.floor(Math.random()*fakeChats.length)]); }, 2500));
+            loopers.push(setInterval(() => { if(Math.random()>0.8) { let g=giftDB[Math.floor(Math.random()*3)]; appendSystemLiveChat(`${fakeNames[Math.floor(Math.random()*fakeNames.length)]} 赠送了 ${g.name}`); } }, 8000));
+        }
+
+        function closeLiveRoom() { loopers.forEach(id => clearInterval(id)); loopers = []; document.getElementById('live-room-view').classList.remove('active'); document.getElementById('lobby-view').classList.add('active'); updateLiveInfoUI(); }
+
+        function appendUserLiveChat(name, text, isMe = false) {
+            const box = document.getElementById('live-chat-box'); const div = document.createElement('div'); div.className = 'live-chat-item';
+            if(isMe) div.innerHTML = `<span class="uname" style="color:var(--pink-live)">[Lv.${getLevel()}] ${name}:</span> ${text}`;
+            else div.innerHTML = `<span class="uname">${name}:</span> ${text}`;
+            box.appendChild(div); box.scrollTop = box.scrollHeight;
+            if(isMe) { chatHistoryAI.push({ role: "user", content: `(弹幕) ${name}: ${text}` }); if(chatHistoryAI.length > 8) chatHistoryAI.shift(); }
+        }
+        function appendStreamerLiveChat(text) { const box = document.getElementById('live-chat-box'); const div = document.createElement('div'); div.className = 'live-chat-item streamer'; div.innerHTML = `<span class="uname">【主播】${currentStreamer.name}:</span> ${text}`; box.appendChild(div); box.scrollTop = box.scrollHeight; }
+        function appendSystemLiveChat(text, isMega = false) { const box = document.getElementById('live-chat-box'); const div = document.createElement('div'); div.className = isMega ? 'live-chat-item mega-gift' : 'live-chat-item system'; div.innerText = text; box.appendChild(div); box.scrollTop = box.scrollHeight; }
+        function sendDanmaku() { let input = document.getElementById('danmaku-input'); let text = input.value.trim(); if(!text) return; appendUserLiveChat(myName, text, true); input.value = ''; myExp += 5; updateLiveInfoUI(); triggerLiveAI(); }
+
+        // --- 全新韩系梦幻粒子礼物特效 ---
+        let selectedGiftIndex = 0;
+        function openGiftPanel() {
+            document.getElementById('gift-panel-money').innerText = myMoney; let grid = document.getElementById('gift-render-area'); grid.innerHTML = '';
+            giftDB.forEach((g, idx) => {
+                let div = document.createElement('div'); div.className = `gift-item ${idx === selectedGiftIndex ? 'selected' : ''}`;
+                div.innerHTML = `<img src="${g.img}"><div class="g-name">${g.name}</div><div class="g-price">🪙${g.price}</div>`;
+                div.onclick = () => { selectedGiftIndex = idx; document.querySelectorAll('.gift-item').forEach(el => el.classList.remove('selected')); div.classList.add('selected'); }; grid.appendChild(div);
+            }); document.getElementById('gift-modal').classList.add('show');
+        }
+
+        function createParticles(isMega) {
+            const container = document.getElementById('gift-anim-container');
+            const count = isMega ? 40 : 15;
+            const symbols = isMega ? ['✨','⭐','💥','💰'] : ['💖','🌸','✨','🎵'];
+            
+            for(let i=0; i<count; i++) {
+                let p = document.createElement('div');
+                p.className = isMega ? 'particle p-explode' : 'particle p-float';
+                p.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+                
+                if(isMega) {
+                    // 环形爆炸
+                    let angle = Math.random() * Math.PI * 2;
+                    let radius = 100 + Math.random() * 200;
+                    p.style.setProperty('--tx', `${Math.cos(angle)*radius}px`);
+                    p.style.setProperty('--ty', `${Math.sin(angle)*radius}px`);
+                    p.style.left = '50%'; p.style.top = '50%';
+                } else {
+                    // 底部向上飘
+                    p.style.left = `${10 + Math.random() * 80}%`;
+                    p.style.top = `${70 + Math.random() * 20}%`;
+                }
+                
+                p.style.animationDelay = `${Math.random() * 0.5}s`;
+                p.style.fontSize = `${20 + Math.random() * 20}px`;
+                container.appendChild(p);
+                setTimeout(() => p.remove(), 3000);
+            }
+        }
+
+        function sendGiftAction() {
+            let g = giftDB[selectedGiftIndex];
+            if(myMoney < g.price) return showToast("金币不足，请先充值！");
+            myMoney -= g.price; myExp += Math.floor(g.price / 2); updateLiveInfoUI();
+            document.getElementById('gift-panel-money').innerText = myMoney; document.getElementById('gift-modal').classList.remove('show');
+            
+            const isMegaGift = g.price >= 1000;
+            const container = document.getElementById('gift-anim-container');
+            const bg = document.getElementById('room-bg');
+            
+            // 播放特效
+            if(isMegaGift) bg.classList.add('dim'); // 背景变暗
+            createParticles(isMegaGift);
+            
+            const d = document.createElement('div'); d.className = 'big-gift-anim';
+            d.innerHTML = `<img src="${g.img}"><span>${myName} 送出 ${g.name}</span>`;
+            container.appendChild(d); 
+            
+            setTimeout(() => { d.remove(); if(isMegaGift) bg.classList.remove('dim'); }, 4000);
+            
+            appendSystemLiveChat(`✨全屏广播: 感谢 ${myName} 豪爽赠送 【${g.name}】！！✨`, isMegaGift);
+            chatHistoryAI.push({ role: "user", content: `(系统提示: 观众 ${myName} 刚刚送给你一个价值 ${g.price} 金币的礼物【${g.name}】。金额越大代表越贵重。)` });
+            triggerLiveAI();
+        }
+
+        let isLiveFetching = false;
+        async function triggerLiveAI() {
+            if(isLiveFetching) return;
+            const url = localStorage.getItem('apiUrl'); const key = localStorage.getItem('apiKey'); const model = localStorage.getItem('apiModel');
+            if(!url || !key) return appendSystemLiveChat("【系统】未配置猫箱API，主播无声。"); isLiveFetching = true;
+            let sysPrompt = `指令：扮演直播主播。设定：${currentStreamer.prompt}。观众：${roomViewers}人。
+规则：1.口语化回应弹幕/礼物。2.大额礼物极度激动。3.（）内写动作神态。4.简短真实。`;
+            let lores = currentStreamer.lores || []; let activeLores = loreData.filter(l => lores.includes(l.keyword));
+            if(activeLores.length > 0) sysPrompt += "\n世界观背景设定：\n" + activeLores.map(l => l.content).join("\n");
+            try {
+                let res = await fetch(url.endsWith('/') ? url + 'chat/completions' : url + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ model: model, messages: [{ role: "system", content: sysPrompt }, ...chatHistoryAI] }) });
+                let reply = (await res.json()).choices[0].message.content; chatHistoryAI.push({ role: "assistant", content: reply }); appendStreamerLiveChat(reply);
+            } catch(e) {} finally { isLiveFetching = false; }
+        }
+
+        // --- 自定义礼物管理 ---
+        let tempGiftImg = '';
+        function openEditGifts() { document.getElementById('lobby-view').classList.remove('active'); document.getElementById('edit-gift-modal').classList.add('active'); renderCustomGiftList(); }
+        function closeEditGifts() { document.getElementById('edit-gift-modal').classList.remove('active'); document.getElementById('lobby-view').classList.add('active'); }
+        function previewGiftImg(input) { if(input.files && input.files[0]){ let r = new FileReader(); r.onload = e => { tempGiftImg = e.target.result; document.getElementById('upload-g-preview').innerHTML = `<img src="${tempGiftImg}" style="width:100%; height:100%; object-fit:contain; border-radius:10px;">`;}; r.readAsDataURL(input.files[0]); } }
+        function saveNewGift() { let n = document.getElementById('new-g-name').value; let p = parseInt(document.getElementById('new-g-price').value); if(!n || !p || !tempGiftImg) return showToast("信息必填"); giftDB.push({ id: 'cg_' + Date.now(), name: n, price: p, img: tempGiftImg }); localStorage.setItem('live_gifts', JSON.stringify(giftDB)); showToast("添加成功"); document.getElementById('new-g-name').value = ''; document.getElementById('new-g-price').value = ''; document.getElementById('upload-g-preview').innerHTML = '+'; tempGiftImg = ''; renderCustomGiftList(); }
+        function renderCustomGiftList() { const cl = document.getElementById('custom-gift-list'); cl.innerHTML = ''; giftDB.forEach((g, idx) => { let div = document.createElement('div'); div.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:var(--bg-color); padding:10px; border-radius:12px;"; div.innerHTML = `<div style="display:flex; align-items:center; gap:10px;"><img src="${g.img}" style="width:30px; height:30px; object-fit:contain;"><span style="font-size:14px; font-weight:bold;">${g.name} (🪙${g.price})</span></div><span style="color:#ff4d4f; font-size:20px; cursor:pointer;" onclick="delGift(${idx})"><iconify-icon icon="ph:trash"></iconify-icon></span>`; cl.appendChild(div); }); }
+        function delGift(idx) { if(confirm("删除此礼物？")) { giftDB.splice(idx, 1); localStorage.setItem('live_gifts', JSON.stringify(giftDB)); renderCustomGiftList(); } }
+
+        // --- 猫箱其他逻辑 ---
+        function renderLoreTags(containerId, selectedKeywords = []) { let container = document.getElementById(containerId); container.innerHTML = ''; if(loreData.length === 0) return container.innerHTML = '<span style="font-size:12px; color:var(--text-sub)">暂无世界书</span>'; loreData.forEach(lore => { if(!lore.keyword) return; let tag = document.createElement('div'); tag.className = 'lore-tag' + (selectedKeywords.includes(lore.keyword) ? ' active' : ''); tag.innerText = lore.keyword; tag.dataset.kw = lore.keyword; tag.onclick = () => tag.classList.toggle('active'); container.appendChild(tag); }); }
+        function openCreateModal() { document.getElementById('new-char-name').value = ''; document.getElementById('new-char-prompt').value = ''; document.getElementById('new-char-greeting').value = ''; renderLoreTags('create-lore-tags', []); document.getElementById('create-modal').classList.add('active'); }
+        function closeCreateModal() { document.getElementById('create-modal').classList.remove('active'); }
+        function renderLorebook() { let container = document.getElementById('lorebook-container'); container.innerHTML = ''; loreData.forEach((lore, index) => { let div = document.createElement('div'); div.className = 'lore-item'; div.innerHTML = `<div class="lore-header" onclick="this.nextElementSibling.classList.toggle('open')"><span>${lore.keyword || '未命名'}</span><iconify-icon icon="ph:caret-down"></iconify-icon></div><div class="lore-body"><input type="text" class="form-control" style="margin-bottom:8px; padding:10px;" placeholder="模块名称/标识" value="${lore.keyword}" id="lore-kw-${index}"><textarea class="form-control" style="min-height:80px; resize:none; padding:10px;" placeholder="设定内容..." id="lore-ct-${index}">${lore.content}</textarea><div style="display:flex; gap:10px; margin-top:10px;"><button class="btn-outline" style="flex:1;" onclick="saveLore(${index})">保存</button><button class="btn-outline" style="color:#ff4d4f;" onclick="deleteLore(${index})">删除</button></div></div>`; container.appendChild(div); }); }
+        function addNewLoreEntry() { loreData.unshift({ keyword: '', content: '', category: '', enabled: true, priority: 10 }); renderLorebook(); document.querySelector('.lore-body').classList.add('open'); }
+        function saveLore(index) { loreData[index].keyword = document.getElementById(`lore-kw-${index}`).value.trim(); loreData[index].content = document.getElementById(`lore-ct-${index}`).value.trim(); localStorage.setItem('lorebook_v5', JSON.stringify(loreData)); renderLorebook(); showToast("保存成功"); }
+        function deleteLore(index) { if(confirm('删除此词条？')) { loreData.splice(index, 1); localStorage.setItem('lorebook_v5', JSON.stringify(loreData)); renderLorebook(); } }
+        function loadApiData() { document.getElementById('api-url').value = localStorage.getItem('apiUrl') || ''; document.getElementById('api-key').value = localStorage.getItem('apiKey') || ''; let model = localStorage.getItem('apiModel'); if(model) document.getElementById('api-model').innerHTML = `<option value="${model}">${model}</option>`; }
+        async function fetchModels() { const url = document.getElementById('api-url').value; const key = document.getElementById('api-key').value; if(!url || !key) return showToast("配置缺失"); const sel = document.getElementById('api-model'); sel.innerHTML = '<option>拉取中...</option>'; try { let res = await fetch(url.replace(/\/chat\/completions\/?$/, '') + '/models', { headers: { 'Authorization': `Bearer ${key}` } }); let data = await res.json(); sel.innerHTML = ''; data.data.forEach(m => { let opt = document.createElement('option'); opt.value = opt.textContent = m.id; sel.appendChild(opt); }); showToast("拉取成功"); } catch(e) { sel.innerHTML = '<option>失败</option>'; } }
+        function saveApi() { localStorage.setItem('apiUrl', document.getElementById('api-url').value); localStorage.setItem('apiKey', document.getElementById('api-key').value); localStorage.setItem('apiModel', document.getElementById('api-model').value); showToast("保存完毕"); }
+        function renderContacts() { const cc = document.getElementById('contact-list-container'); const mc = document.getElementById('msg-list-container'); cc.innerHTML = ''; mc.innerHTML = ''; if(contactData.length === 0) { cc.innerHTML = '<div style="text-align:center; padding:50px 20px; color:var(--text-sub);">请构建人物</div>'; return; } contactData.forEach(item => { let avatar = item.avatar || 'https://api.iconify.design/ph/user-circle-light.svg?color=%238f959e'; let div = document.createElement('div'); div.className = 'list-card'; div.innerHTML = `<img src="${avatar}"><div class="info"><div class="title">${item.name}</div><div class="desc">${item.prompt}</div></div>`; div.onclick = () => startChat(item); cc.appendChild(div); let history = safeGetJSON('hist_' + item.id, []); if(history.length > 0) { let mCard = document.createElement('div'); mCard.className = 'list-card'; mCard.innerHTML = `<img src="${avatar}"><div class="info"><div class="title">${item.name}</div><div class="desc">${history[history.length-1].content}</div></div>`; mCard.onclick = () => startChat(item); mc.insertBefore(mCard, mc.firstChild); } }); }
+        function saveNewCharacter() { let name = document.getElementById('new-char-name').value; let prompt = document.getElementById('new-char-prompt').value; if(!name || !prompt) return showToast("必填"); let lores = Array.from(document.querySelectorAll('#create-lore-tags .lore-tag.active')).map(el => el.dataset.kw); contactData.push({ id: 'chr_' + Date.now(), name: name, prompt: prompt, greeting: document.getElementById('new-char-greeting').value, avatar: '', lores: lores }); localStorage.setItem('contacts_final', JSON.stringify(contactData)); renderContacts(); closeCreateModal(); showToast("加入成功"); }
+        window.onload = () => { renderContacts(); syncGlobalInfo(); }
+        let currentRoleData = null; let chatHistory = [];
+        function openRoleInfo() { if(!currentRoleData) return; document.getElementById('edit-role-avatar').src = currentRoleData.avatar || 'https://api.iconify.design/ph/user-circle-light.svg?color=%238f959e'; document.getElementById('edit-role-name').value = currentRoleData.name; document.getElementById('edit-role-desc').value = currentRoleData.prompt; renderLoreTags('edit-lore-tags', currentRoleData.lores || []); document.getElementById('role-info-modal').classList.add('show'); }
+        function saveRoleInfo() { currentRoleData.name = document.getElementById('edit-role-name').value; currentRoleData.prompt = document.getElementById('edit-role-desc').value; currentRoleData.avatar = document.getElementById('edit-role-avatar').src; currentRoleData.lores = Array.from(document.querySelectorAll('#edit-lore-tags .lore-tag.active')).map(el => el.dataset.kw); document.getElementById('chat-title').innerText = currentRoleData.name; let idx = contactData.findIndex(c => c.id === currentRoleData.id); if(idx > -1) { contactData[idx] = currentRoleData; localStorage.setItem('contacts_final', JSON.stringify(contactData)); } document.querySelectorAll('.msg-block.ai .msg-avatar').forEach(img => { img.src = currentRoleData.avatar; }); document.getElementById('role-info-modal').classList.remove('show'); renderContacts(); showToast("更新成功"); }
+        function startChat(roleObj) { currentRoleData = roleObj; document.getElementById('chat-title').innerText = roleObj.name; document.getElementById('chat-room').style.display = 'flex'; document.getElementById('chat-box').innerHTML = ''; chatHistory = safeGetJSON('hist_' + roleObj.id, []); let displayAvatar = roleObj.avatar || 'https://api.iconify.design/ph/user-circle-light.svg?color=%238f959e'; if (chatHistory.length === 0) { chatHistory.push({ role: "assistant", content: roleObj.greeting || '【系统】连接成功。' }); localStorage.setItem('hist_' + roleObj.id, JSON.stringify(chatHistory)); } chatHistory.forEach(msg => { if(msg.role === 'user') appendMsg('user', myName, msg.content, ''); else if (msg.role === 'assistant') appendMsg('ai', roleObj.name, msg.content, displayAvatar); }); }
+        function closeChatRoom() { document.getElementById('chat-room').style.display = 'none'; renderContacts(); }
+        function appendMsg(role, senderName, text, avatarUrl, id = Date.now().toString()) { const box = document.getElementById('chat-box'); const div = document.createElement('div'); div.className = `msg-block ${role}`; div.id = `msg-${id}`; let img = role === 'user' ? document.getElementById('user-avatar').src : avatarUrl; div.innerHTML = `${role === 'ai' ? `<img src="${img}" class="msg-avatar" onclick="openRoleInfo()">` : `<img src="${img}" class="msg-avatar">`}<div class="msg-content"><div class="msg-name">${senderName}</div><div class="msg-text">${text}</div></div>`; box.appendChild(div); setTimeout(() => box.scrollTop = box.scrollHeight, 50); return id; }
+        async function sendMsg() { let input = document.getElementById('chat-input'); let text = input.value.trim(); if(!text) return; appendMsg('user', myName, text, ''); input.value = ''; chatHistory.push({ role: "user", content: text }); localStorage.setItem('hist_' + currentRoleData.id, JSON.stringify(chatHistory)); fetchApi(); }
+        async function fetchApi() { const url = localStorage.getItem('apiUrl'); const key = localStorage.getItem('apiKey'); const model = localStorage.getItem('apiModel'); let displayAvatar = currentRoleData.avatar || 'https://api.iconify.design/ph/user-circle-light.svg?color=%238f959e'; if(!key) return showToast("尚未配置API"); let loadId = appendMsg('ai', currentRoleData.name, '...', displayAvatar); try { let sysPrompt = `指令：扮演推演。当前剧本：${currentRoleData.prompt}。主观视角名字：${myName}。`; let activeLores = loreData.filter(l => l.keyword && currentRoleData.lores && currentRoleData.lores.includes(l.keyword)); if (activeLores.length > 0) sysPrompt += "\n装载设定：\n" + activeLores.map(l => l.content).join("\n"); let res = await fetch(url.endsWith('/') ? url + 'chat/completions' : url + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ model: model, messages: [{ role: "system", content: sysPrompt }, ...chatHistory] }) }); document.getElementById(`msg-${loadId}`).remove(); if(!res.ok) throw new Error("API异常"); let reply = (await res.json()).choices[0].message.content; chatHistory.push({ role: "assistant", content: reply }); localStorage.setItem('hist_' + currentRoleData.id, JSON.stringify(chatHistory)); appendMsg('ai', currentRoleData.name, reply, displayAvatar); } catch(e) { document.getElementById(`msg-${loadId}`).remove(); appendMsg('ai', '系统报错', e.message, displayAvatar); } }
+        function updateMask(type, val) { document.documentElement.style.setProperty(`--mask-${type}`, val + '%'); }
+        function uploadMask(input) { if(input.files && input.files[0]){ let r = new FileReader(); r.onload = e => { document.getElementById('user-mask').style.backgroundImage = `url('${e.target.result}')`; }; r.readAsDataURL(input.files[0]); } }
+        function changeAvatar(input) { if(input.files && input.files[0]){ let r = new FileReader(); r.onload = e => document.getElementById('user-avatar').src = e.target.result; r.readAsDataURL(input.files[0]); } }
+        function uploadGallery(input) { if(input.files) { Array.from(input.files).forEach(f => { let r = new FileReader(); r.onload = e => { let img = document.createElement('img'); img.className = 'gallery-item'; img.src = e.target.result; document.getElementById('gallery-grid').appendChild(img); }; r.readAsDataURL(f); }); } }
+        function changeRoleAvatar(input) { if(input.files && input.files[0]){ let r = new FileReader(); r.onload = e => document.getElementById('edit-role-avatar').src = e.target.result; r.readAsDataURL(input.files[0]); } }
+    </script>
+</body>
+</html>
